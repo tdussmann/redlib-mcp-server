@@ -3,7 +3,9 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/alfafadock/mcp-redlib?label=docker%20pulls)](https://hub.docker.com/r/alfafadock/mcp-redlib)
 [![Docker Image Size](https://img.shields.io/docker/image-size/alfafadock/mcp-redlib/latest)](https://hub.docker.com/r/alfafadock/mcp-redlib)
 
-A **Model Context Protocol (MCP) server** that enables AI agents to interact with Reddit through your private **Redlib** instance. No Reddit API keys required - just a running Redlib instance!
+A **Model Context Protocol (MCP) server** that enables AI agents to interact with Reddit through your private **Redlib** instance. No Reddit API keys required — just a running Redlib instance!
+
+Serves tools over **HTTP (Streamable HTTP transport)** — deploy it anywhere and connect any MCP client.
 
 ---
 
@@ -16,30 +18,27 @@ A **Model Context Protocol (MCP) server** that enables AI agents to interact wit
 - [Available Tools](#️-available-tools)
 - [Integration with AI Clients](#-integration-with-ai-clients)
   - [Claude Desktop](#claude-desktop)
+  - [Hermes Agent (Native MCP)](#hermes-agent-native-mcp)
   - [Cursor](#cursor)
   - [VS Code / GitHub Copilot](#vs-code--github-copilot)
-  - [OpenAI Codex](#openai-codex)
-  - [ForgeCode](#forgecode)
-  - [KiloCode](#kilocode)
+  - [Any HTTP MCP Client](#any-http-mcp-client)
 - [Docker Compose](#-docker-compose)
 - [Security: Default vs Hardened](#-security-default-vs-hardened)
 - [Development](#-development)
 - [Example Usage with AI](#-example-usage-with-ai)
 - [Contributing](#-contributing)
 - [License](#-license)
-- [Acknowledgments](#-acknowledgments)
-- [Links](#-links)
 
 ---
 
-
 ## ✨ Features
 
-- 🔒 **Privacy-First** - Uses your self-hosted Redlib, no tracking or API keys
-- 🛠️ **3 Powerful Tools** - Search posts, get hot posts, fetch full post details with comments
-- 🐳 **Docker Ready** - Both simple and hardened Docker images available
-- 🧩 **Easy Setup** - Works with Claude Desktop, Cursor, VS Code, Codex, ForgeCode, KiloCode and any MCP-compatible client
-- 📊 **Structured Output** - Returns clean JSON instead of raw HTML
+- 🔒 **Privacy-First** — Uses your self-hosted Redlib, no tracking or API keys
+- 🛠️ **3 Powerful Tools** — Search posts, get hot posts, fetch full post details with comments
+- 🌐 **HTTP MCP Endpoint** — Streamable HTTP transport, no stdio dependency
+- 🐳 **Docker Ready** — Exposes port `3000`, deploy anywhere
+- 🔌 **Works with Any HTTP MCP Client** — Claude Desktop, Hermes, Cursor, VS Code, and more
+- 📊 **Structured Output** — Returns clean JSON instead of raw HTML
 
 ---
 
@@ -47,17 +46,16 @@ A **Model Context Protocol (MCP) server** that enables AI agents to interact wit
 
 Before using this MCP server, you need:
 
-1. **Redlib Instance** - A running Redlib instance (default: `http://localhost:8080`)
+1. **Redlib Instance** — A running Redlib instance (default: `http://localhost:8080`)
    - [Redlib GitHub](https://github.com/redlib-org/redlib)
    - [Redlib Docker Setup](https://github.com/redlib-org/redlib#docker)
 
-2. **MCP Client** - One of:
+2. **MCP Client** — Any MCP client that supports HTTP transport:
    - [Claude Desktop](https://claude.ai/download)
+   - [Hermes Agent](https://hermes-agent.nousresearch.com)
    - [Cursor](https://cursor.sh/)
    - [VS Code](https://code.visualstudio.com/) with GitHub Copilot
-   - [OpenAI Codex](https://openai.com/index/introducing-codex/)
-   - [ForgeCode](https://github.com/tailcallhq/forgecode)
-   - [KiloCode](https://kilo.ai/)
+   - Any MCP-compatible client
 
 ---
 
@@ -67,21 +65,25 @@ Before using this MCP server, you need:
 
 ```bash
 # Pull and run the default version
-docker run -i --rm \
-  --network host \
+docker run -d --rm \
+  -p 3000:3000 \
   -e REDLIB_URL=http://localhost:8080 \
+  --name redlib-mcp \
   alfafadock/mcp-redlib:latest
 ```
+
+The MCP endpoint will be available at `http://localhost:3000/mcp`.
 
 ### Option 2: Hardened Docker (Security-Focused)
 
 ```bash
 # Uses non-root user and minimal privileges
-docker run -i --rm \
-  --network host \
+docker run -d --rm \
+  -p 3000:3000 \
   --cap-drop=ALL \
   --security-opt no-new-privileges:true \
   -e REDLIB_URL=http://localhost:8080 \
+  --name redlib-mcp-hardened \
   alfafadock/mcp-redlib:hardened
 ```
 
@@ -89,7 +91,7 @@ docker run -i --rm \
 
 ```bash
 # Clone and setup
-git clone https://github.com/Devthatdoes/redlib-mcp-server.git
+git clone https://github.com/tdussmann/redlib-mcp-server.git
 cd redlib-mcp-server
 
 # Install dependencies
@@ -98,7 +100,7 @@ npm install
 # Build
 npm run build
 
-# Run
+# Run (starts HTTP server on port 3000)
 npm start
 ```
 
@@ -116,15 +118,38 @@ services:
   redlib-mcp:
     image: alfafadock/mcp-redlib:latest
     container_name: redlib-mcp
-    network_mode: "host"  # Uses host network for MCP client communication
+    ports:
+      - "3000:3000"
     environment:
-      - REDLIB_URL=http://localhost:8080  # Change if Redlib is on a different port
+      - REDLIB_URL=http://redlib:8080   # Adjust if Redlib is on a different host
+      - PORT=3000
     restart: unless-stopped
-    # For hardened image, change image to: alfafadock/mcp-redlib:hardened
+```
+
+If running alongside a Redlib container in the same compose file:
+
+```yaml
+services:
+  redlib:
+    image: quay.io/redlib/redlib:latest
+    container_name: redlib
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  redlib-mcp:
+    image: alfafadock/mcp-redlib:latest
+    container_name: redlib-mcp
+    ports:
+      - "3000:3000"
+    environment:
+      - REDLIB_URL=http://redlib:8080
+    depends_on:
+      - redlib
+    restart: unless-stopped
 ```
 </details>
 
----
 ---
 
 ## 🔧 Configuration
@@ -134,25 +159,31 @@ services:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `REDLIB_URL` | `http://localhost:8080` | URL of your Redlib instance |
+| `PORT` | `3000` | Port for the HTTP MCP server |
+| `MCP_ENDPOINT` | `/mcp` | HTTP path for the MCP endpoint |
 
-### Custom Redlib Port Example
-
-If your Redlib runs on a different port (e.g., 8085):
+### Example: Custom Redlib Port (e.g., 8085)
 
 ```bash
-docker run -i --rm \
-  --network host \
+docker run -d --rm \
+  -p 3000:3000 \
   -e REDLIB_URL=http://localhost:8085 \
+  -e PORT=3000 \
   alfafadock/mcp-redlib:latest
 ```
 
-### Example `.env` File
-
-Copy `.env.example` to `.env` and modify as needed:
+### Example: Custom Port and Endpoint
 
 ```bash
-cp .env.example .env
+docker run -d --rm \
+  -p 8081:8081 \
+  -e PORT=8081 \
+  -e MCP_ENDPOINT=/redlib \
+  -e REDLIB_URL=http://localhost:8080 \
+  alfafadock/mcp-redlib:latest
 ```
+
+Server available at `http://localhost:8081/redlib`.
 
 ---
 
@@ -162,8 +193,8 @@ cp .env.example .env
 Search Reddit posts using your private Redlib instance.
 
 **Parameters:**
-- `query` (required) - Search query string
-- `subreddit` (optional) - Limit search to specific subreddit
+- `query` (required) — Search query string
+- `subreddit` (optional) — Limit search to specific subreddit
 
 **Example:**
 ```json
@@ -181,8 +212,8 @@ Search Reddit posts using your private Redlib instance.
 Get hot posts from a specific subreddit.
 
 **Parameters:**
-- `subreddit` (required) - Subreddit name (without r/)
-- `limit` (optional) - Number of posts (default: 25)
+- `subreddit` (required) — Subreddit name (without r/)
+- `limit` (optional) — Number of posts (default: 25)
 
 **Example:**
 ```json
@@ -198,8 +229,8 @@ Get hot posts from a specific subreddit.
 Get a specific post with its comments.
 
 **Parameters:**
-- `subreddit` (required) - Subreddit name
-- `postId` (required) - Reddit post ID (from search results)
+- `subreddit` (required) — Subreddit name
+- `postId` (required) — Reddit post ID (from search results)
 
 **Example:**
 ```json
@@ -215,6 +246,8 @@ Get a specific post with its comments.
 
 ## 🔌 Integration with AI Clients
 
+All integrations use the **HTTP MCP endpoint** at `http://localhost:3000/mcp` (adjust host/port for your deployment).
+
 ### Claude Desktop
 
 Edit `~/.config/claude/claude_desktop_config.json` (Linux/macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
@@ -223,30 +256,18 @@ Edit `~/.config/claude/claude_desktop_config.json` (Linux/macOS) or `%APPDATA%\C
 {
   "mcpServers": {
     "redlib": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "--network", "host",
-        "-e", "REDLIB_URL=http://localhost:8080",
-        "alfafadock/mcp-redlib:latest"
-      ]
+      "url": "http://localhost:3000/mcp"
     }
   }
 }
 ```
 
-**For custom Redlib port (e.g., 8085):**
+**For remote deployment:**
 ```json
 {
   "mcpServers": {
     "redlib": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "--network", "host",
-        "-e", "REDLIB_URL=http://localhost:8085",
-        "alfafadock/mcp-redlib:latest"
-      ]
+      "url": "http://your-server-ip:3000/mcp"
     }
   }
 }
@@ -258,6 +279,38 @@ Edit `~/.config/claude/claude_desktop_config.json` (Linux/macOS) or `%APPDATA%\C
 
 ---
 
+### Hermes Agent (Native MCP)
+
+Add to your `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  redlib:
+    url: "http://localhost:3000/mcp"
+```
+
+If your Redlib container is networked alongside Hermes Agent, use the container name/host:
+
+```yaml
+mcp_servers:
+  redlib:
+    url: "http://redlib-mcp:3000/mcp"
+```
+
+For remote deployments with authentication:
+
+```yaml
+mcp_servers:
+  redlib:
+    url: "http://your-server:3000/mcp"
+    headers:
+      Authorization: "Bearer your-token-here"
+```
+
+**After updating:** Restart Hermes Agent. Tools will appear with the `mcp_redlib_` prefix.
+
+---
+
 ### Cursor
 
 Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project level):
@@ -266,171 +319,58 @@ Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project level):
 {
   "mcpServers": {
     "redlib": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "--network", "host", "-e", "REDLIB_URL=http://localhost:8080", "alfafadock/mcp-redlib:latest"]
+      "url": "http://localhost:3000/mcp"
     }
   }
 }
 ```
 
-**Project-level setup:** Create `.cursor/mcp.json` in your project root.
-
-**After updating:** Cursor will automatically detect the changes. Use the Command Palette (Cmd/Ctrl+Shift+P) and search for "MCP" to manage servers.
-
-*Reference: [Cursor MCP Documentation](https://cursor.com/docs/mcp)*
-
 ---
 
 ### VS Code / GitHub Copilot
 
-#### Option A: Workspace Configuration
 Create `.vscode/mcp.json` in your project:
 
 ```json
 {
   "servers": {
     "redlib": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "--network", "host", "-e", "REDLIB_URL=http://localhost:8080", "alfafadock/mcp-redlib:latest"]
+      "url": "http://localhost:3000/mcp"
     }
   }
 }
 ```
-
-#### Option B: User Configuration (Global)
-Use Command Palette (Cmd/Ctrl+Shift+P) → "MCP: Open User Configuration"
-
-```json
-{
-  "mcp": {
-    "servers": {
-      "redlib": {
-        "command": "docker",
-        "args": ["run", "-i", "--rm", "--network", "host", "-e", "REDLIB_URL=http://localhost:8080", "alfafadock/mcp-redlib:latest"]
-      }
-    }
-  }
-}
-```
-
-**After updating:** Reload VS Code. The tools will appear in GitHub Copilot's Agent Mode.
-
-*Reference: [VS Code MCP Documentation](https://code.visualstudio.com/docs/copilot/customization/mcp-servers)*
 
 ---
 
-### OpenAI Codex
+### Any HTTP MCP Client
 
-Edit `~/.codex/config.toml` (global) or `.codex/config.toml` (project):
+The server speaks the standard **MCP Streamable HTTP transport** (protocol version 2025-03-26). Configure any compliant MCP client with:
 
-```toml
-[mcp_servers.redlib]
-command = "docker"
-args = ["run", "-i", "--rm", "--network", "host", "-e", "REDLIB_URL=http://localhost:8080", "alfafadock/mcp-redlib:latest"]
 ```
-
-**Project-level setup:** Create `.codex/config.toml` in your project root.
-
-**After updating:** Restart Codex. Use `codex mcp list` to verify the server is loaded.
-
-*Reference: [Codex MCP Documentation](https://developers.openai.com/codex/mcp)*
-
----
-
-### ForgeCode
-
-ForgeCode supports MCP servers via the **`forge mcp`** command for easy import.
-
-#### Option A: Quick Import (Recommended)
-
-Use the built-in MCP import functionality:
-
-```bash
-# Import the Redlib MCP server
-forge mcp import alfafadock/mcp-redlib:latest
-
-# List imported servers
-forge mcp list
-
-# Reload to apply changes
-forge mcp reload
+URL: http://<host>:3000/mcp
 ```
-
-#### Option B: Project Configuration
-Create `.mcp.json` in your project root:
-
-```json
-{
-  "mcpServers": {
-    "redlib": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "--network", "host", "-e", "REDLIB_URL=http://localhost:8080", "alfafadock/mcp-redlib:latest"]
-    }
-  }
-}
-```
-
-#### Option C: Global Configuration
-Edit ForgeCode's config directory (check extension settings for the exact path).
-
-**After updating:** Reload the ForgeCode extension using `forge mcp reload`. The MCP tools should appear in the AI assistant interface.
-
-*Reference: [ForgeCode Documentation](https://forgecode.dev/docs/mcp-integration/)*
-
----
-
-### KiloCode
-
-#### Option A: Global Configuration
-Edit `~/.config/kilo/kilo.jsonc` or use Settings → MCP in KiloCode:
-
-```json
-{
-  "mcpServers": {
-    "redlib": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "--network", "host", "-e", "REDLIB_URL=http://localhost:8080", "alfafadock/mcp-redlib:latest"]
-    }
-  }
-}
-```
-
-#### Option B: Project Configuration
-Create `.kilocode/mcp.json` or `kilo.jsonc` in your project root:
-
-```json
-{
-  "mcpServers": {
-    "redlib": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "--network", "host", "-e", "REDLIB_URL=http://localhost:8080", "alfafadock/mcp-redlib:latest"]
-    }
-  }
-}
-```
-
-**After updating:** Open KiloCode Settings → MCP → Add Server, or edit the config file directly.
-
-*Reference: [KiloCode MCP Documentation](https://kilo.ai/docs/automate/mcp/using-in-kilo-code)*
 
 ---
 
 ## 🔒 Security: Default vs Hardened
+
 | Feature | Default (`latest`) | Hardened (`hardened`) |
 |---------|-------------------|---------------------|
 | **User** | root | Non-root (mcpuser) |
 | **File Ownership** | root | mcpuser |
 | **Build Stages** | Single | Multi-stage (smaller) |
 | **Runtime Caps** | Default | Requires `--cap-drop=ALL` |
+| **Exposed Port** | 3000 | 3000 |
 | **Use Case** | Development, testing | Production |
 
 ### Using Hardened Image
 
 ```bash
-docker run -i --rm \
+docker run -d --rm \
+  -p 3000:3000 \
   --cap-drop=ALL \
   --security-opt no-new-privileges:true \
-  --network host \
   -e REDLIB_URL=http://localhost:8080 \
   alfafadock/mcp-redlib:hardened
 ```
@@ -444,11 +384,11 @@ docker run -i --rm \
 ```
 redlib-mcp-server/
 ├── src/
-│   └── index.ts          # Main server code
-├── dist/                  # Compiled JavaScript (gitignored)
-├── Dockerfile             # Default Docker image
-├── Dockerfile.hardened    # Hardened Docker image
-├── docker-compose.yml     # Production compose
+│   └── index.ts              # HTTP MCP server (Streamable HTTP transport)
+├── dist/                      # Compiled JavaScript (gitignored)
+├── Dockerfile                 # Default Docker image
+├── Dockerfile.hardened        # Hardened Docker image
+├── docker-compose.yml         # Production compose
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -463,8 +403,11 @@ npm install
 # Build TypeScript
 npm run build
 
-# Run locally
+# Run locally (HTTP server on port 3000)
 npm start
+
+# Development mode with hot-reload
+npm run dev
 ```
 
 ### Build Custom Docker Images
@@ -475,6 +418,27 @@ docker build -t redlib-mcp-server .
 
 # Hardened version
 docker build -f Dockerfile.hardened -t redlib-mcp-server:hardened .
+```
+
+### Run Custom Build
+
+```bash
+docker run -d --rm \
+  -p 3000:3000 \
+  -e REDLIB_URL=http://localhost:8080 \
+  redlib-mcp-server
+```
+
+### Test the Endpoint
+
+```bash
+# Health check — should return 400 (no session) or MCP initialization response
+curl -v http://localhost:3000/mcp
+
+# Send MCP initialize request
+curl -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}'
 ```
 
 ---
@@ -501,36 +465,12 @@ AI provides detailed analysis
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-Contributions welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request
+Contributions are welcome! Feel free to open issues or submit pull requests.
 
 ---
 
-## 📄 License
+## License
 
-MIT License - feel free to use this project however you want!
-
----
-
-## 🙏 Acknowledgments
-
-- [Redlib](https://github.com/redlib-org/redlib) - The private Reddit front-end this server interfaces with
-- [Model Context Protocol](https://modelcontextprotocol.io/) - The protocol that makes this integration possible
-- [Cheerio](https://github.com/cheeriojs/cheerio) - HTML parsing library used to extract structured data
-
----
-
-## 🔗 Links
-
-- **Docker Hub**: [alfafadock/mcp-redlib](https://hub.docker.com/r/alfafadock/mcp-redlib)
-- **Issues**: [GitHub Issues](https://github.com/Devthatdoes/redlib-mcp-server/issues)
-- **Redlib**: [github.com/redlib-org/redlib](https://github.com/redlib-org/redlib)
-
----
-
-<p align="center">Made with ❤️ for the privacy-conscious Reddit community</p>
+MIT — see the [LICENSE](./LICENSE) file for details.

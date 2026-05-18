@@ -17,8 +17,12 @@ RUN npm run build
 # Remove devDependencies to keep production image small
 RUN npm prune --production
 
-# Set environment variable for Redlib URL (default: Redlib's default port 8080)
+# Expose the MCP server port
+EXPOSE 3000
+
 # Set environment variable for Redlib URL (default: Redlib's default port 8080)
 ENV REDLIB_URL=http://localhost:8080
+ENV PORT=3000
+
 # Start the server
 CMD ["node", "dist/index.js"]

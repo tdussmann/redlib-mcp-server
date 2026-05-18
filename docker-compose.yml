@@ -2,8 +2,10 @@ services:
   redlib-mcp:
     image: alfafadock/mcp-redlib:latest
     container_name: redlib-mcp
-    network_mode: "host"  # Uses host network for MCP client communication
+    ports:
+      - "3000:3000"                     # HTTP MCP endpoint
     environment:
-      - REDLIB_URL=http://localhost:8080  # Change if Redlib is on a different port
+      - REDLIB_URL=http://redlib:8080   # Change if Redlib is on a different host/port
+      - PORT=3000
     restart: unless-stopped
     # For hardened image, change image to: alfafadock/mcp-redlib:hardened
